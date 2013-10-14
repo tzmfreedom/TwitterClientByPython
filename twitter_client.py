@@ -26,6 +26,7 @@ const.ACCESS_TOKEN_URL = "https://api.twitter.com/oauth/access_token"
 const.ACCOUNT_SETTING_URL = "https://api.twitter.com/1.1/account/settings.json"
 const.USER_TIMELINE_URL = "https://api.twitter.com/1.1/statuses/user_timeline.json"
 const.HOME_TIMELINE_URL = "https://api.twitter.com/1.1/statuses/home_timeline.json"
+const.TWEET_DELETE_URL = "https://api.twitter.com/1.1/statuses/destroy/{id}.json"
 const.GET = "GET"
 const.POST = "POST"
 
@@ -48,7 +49,6 @@ def createSignature(is_get, request_url, paramMap, token_secret):
     signature_seed = (urllib.parse.quote(method, '') + "&" +
         urllib.parse.quote(request_url, '') + "&" + urllib.parse.quote(query, '')
         )
-
     digest_maker = hmac.new(signature_key.encode(), signature_seed.encode(), hashlib.sha1)
     return base64.b64encode(digest_maker.digest())
 
@@ -104,7 +104,7 @@ def getAccessToken():
         "screen_name" : resmap_for_accesstoken["screen_name"][0]
     })
     return ret_json
-    
+            
 args = sys.argv
 
 if len(args) == 1:
@@ -165,5 +165,36 @@ elif args[1] == "-o":
                 elif one_tweet["id"] < min_id:
                     min_id = one_tweet["id"]
             cnt += 1;
-    
     outputTweet()
+#指定したjsonをもとにツイートを削除する
+elif args[1] == "-d":
+    #ToDo: stdinどうする？
+    token_fp = open("token.json", "r")
+    token_file = json.load(token_fp)
+    token_fp.close()
+    access_token = token_file["oauth_token"]
+    access_token_secret = token_file["oauth_token_secret"]
+    user_id = token_file["user_id"]
+    screen_name = token_file["screen_name"]
+    
+    cnt = 0
+    for deleteline in json.load(sys.stdin):
+        url = const.TWEET_DELETE_URL.replace("{id}", str(deleteline["id"]))
+        apiParamMap = {}
+        apiParamMap["oauth_consumer_key"] = const.KEY
+        apiParamMap["oauth_nonce"] = str(random.getrandbits(64))
+        apiParamMap["oauth_signature_method"] = const.SIGNATURE_METHOD
+        apiParamMap["oauth_timestamp"] = str(int(time.time()))
+        apiParamMap["oauth_version"] = "1.0"
+        apiParamMap["oauth_token"] = access_token
+        apiParamMap["trim_user"] = "true"
+        apiParamMap["oauth_signature"] = createSignature(False, url, apiParamMap, access_token_secret)
+        
+        req = urllib.request.Request(url=url, data=urllib.parse.urlencode(apiParamMap).encode())
+        res = urllib.request.urlopen(req)
+        retJson = res.read().decode("utf-8")
+        
+        outfile = open("delete_backup.json" % cnt, "a")
+        outfile.write(retJson)
+        outfile.close()
+        cnt += 1;
